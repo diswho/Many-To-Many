@@ -1,0 +1,9 @@
+{
+  "id": 1,
+  "title": "Dead People Who'd Be Influencers Today",
+  "blurb": null,
+  "authors": [
+    { "id": 1, "name": "Blu Renolds", "blurb": "Blue wrote chapter 1" },
+    { "id": 2, "name": "Chip Egan", "blurb": "Chip wrote chapter 2" }
+  ]
+}

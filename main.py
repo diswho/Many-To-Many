@@ -1,122 +1,131 @@
-from sqlalchemy.ext.associationproxy import association_proxy
-from fastapi import FastAPI, Depends
-from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, Column, Integer, String, Table, ForeignKey
-from sqlalchemy.orm import declarative_base, relationship, joinedload
+"""
+FastAPI app called 'Bookipedia' that serves information about books and their authors. A simple example of a
+"many-to-many" relationship *with* extra data. This solution uses SQLAlchemy Association Proxies
+"""
 
+import uvicorn
+from fastapi import FastAPI, Depends
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship, joinedload
+from sqlalchemy.ext.associationproxy import association_proxy
+
+# Make the engine
+# engine = create_engine("sqlite+pysqlite:///:memory:", future=True, echo=True,connect_args={"check_same_thread": False})
 engine = create_engine("sqlite:///./sql_app.db", future=True,
                        echo=True, connect_args={"check_same_thread": False})
-# engine = create_engine("sqlite+pysqlite:///:memory:", future=True,
-#                        echo=True, connect_args={"check_same_thread": False})
-# ===================================================
+
 # Make the DeclarativeMeta
 Base = declarative_base()
 
+# Declare Classes / Tables
 
-class RoleUser(Base):
-    __tablename__ = 'role_users'
-    role_id = Column(ForeignKey('roles.id'), primary_key=True)
-    user_id = Column(ForeignKey('users.id'), primary_key=True)
+# ======================================================= Model
+
+
+class BookAuthor(Base):
+    __tablename__ = 'book_authors'
+    book_id = Column(ForeignKey('books.id'), primary_key=True)
+    author_id = Column(ForeignKey('authors.id'), primary_key=True)
     blurb = Column(String, nullable=False)
-    role = relationship("Role", back_populates="users")
-    user = relationship("User", back_populates="roles")
+    book = relationship("Book", back_populates="authors")
+    author = relationship("Author", back_populates="books")
+
     # proxies
-    role_name = association_proxy(target_collection='role', attr="name")
-    user_name = association_proxy(target_collection='user', attr="username")
+    author_name = association_proxy(target_collection='author', attr='name')
+    book_title = association_proxy(target_collection='book', attr='title')
 
 
-class Role(Base):
-    __tablename__ = 'roles'
+class Book(Base):
+    __tablename__ = 'books'
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    authors = relationship("BookAuthor", back_populates="book")
+
+
+class Author(Base):
+    __tablename__ = 'authors'
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
-    # users = relationship("User", secondary="role_users", back_populates="roles")
-    users = relationship("RoleUser", back_populates="role")
-
-
-class User(Base):
-    __tablename__ = 'users'
-    id = Column(Integer, primary_key=True)
-    username = Column(String, nullable=False)
-    # roles = relationship("Role", secondary="role_users", back_populates="users")
-    roles = relationship("RoleUser", back_populates="user")
+    books = relationship("BookAuthor", back_populates="author")
 
 
 # Create the tables in the database
 Base.metadata.create_all(engine)
-# ===================================================
+
+# ======================================================= Schema
 
 
-class UserBase(BaseModel):
-    id: int = Field(alias='user_id')
-    username: str = Field(alias='user_name')
+class AuthorBase(BaseModel):
+    id: int = Field(alias='author_id')
+    name: str = Field(alias='author_name')
     blurb: Optional[str]
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    # model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    class Config:
+        orm_mode = True
+        allow_population_by_field_name = True
 
 
-class RoleBase(BaseModel):
-    id: int= Field(alias='role_id')
-    name: str= Field(alias='role_name')
+class BookBase(BaseModel):
+    id: int = Field(alias='book_id')
+    title: str = Field(alias='book_title')
     blurb: Optional[str]
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    # model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    class Config:
+        orm_mode = True
+        allow_population_by_field_name = True
 
 
-class UserSchema(UserBase):
-    roles: List[RoleBase]
+class BookSchema(BookBase):
+    authors: List[AuthorBase]
 
 
-class RoleSchema(RoleBase):
-    users: List[UserBase]
+class AuthorSchema(AuthorBase):
+    books: List[BookBase]
 
 
-# ===================================================
+print("================================ Schema")
+
 # Insert data
+with Session(bind=engine) as session:
+    book1 = Book(title="Dead People Who'd Be Influencers Today")
+    book2 = Book(title="How To Make Friends In Your 30s")
+
+    author1 = Author(name="Blu Renolds")
+    author2 = Author(name="Chip Egan")
+    author3 = Author(name="Alyssa Wyatt")
+
+    session.add_all([book1, book2, author1, author2, author3])
+    session.commit()
+
+    book_author1 = BookAuthor(
+        book_id=book1.id, author_id=author1.id, blurb="Blue wrote chapter 1")
+    book_author2 = BookAuthor(
+        book_id=book1.id, author_id=author2.id, blurb="Chip wrote chapter 2")
+    book_author3 = BookAuthor(
+        book_id=book2.id, author_id=author1.id, blurb="Blue wrote chapters 1-3")
+    book_author4 = BookAuthor(
+        book_id=book2.id, author_id=author3.id, blurb="Alyssa wrote chapter 4")
+
+    session.add_all([book_author1, book_author2, book_author3, book_author4])
+    session.commit()
+print("================================ Insert data")
+# ================================================================ Printing
 # with Session(bind=engine) as session:
-#     role1 = Role(name="user")
-#     role2 = Role(name="moderator")
-#     role3 = Role(name="admin")
+#     # db_book = session.query(Book).options(joinedload(Book.authors).options(joinedload(BookAuthor.author))).first()
+#     db_book = session.query(Book).options(joinedload(Book.authors).options(
+#         joinedload(BookAuthor.author))).where(Book.id == 1).one()
 
-#     user1 = User(username="normal")
-#     user2 = User(username="superadmin")
+#     schema_book = BookSchema.from_orm(db_book)
+#     print("========= db_book: ", schema_book.json())
 
-# #     user1.roles = [role1, role3]
-# #     user2.roles = [role2, role3]
-
-#     session.add_all([role1, role2, role3, user1, user2])
-#     session.commit()
-#     print("=========== Role, User")
-
-#     role_user1 = RoleUser(role_id=role1.id, user_id=user1.id, blurb="Blue wrote chapter 1")
-#     role_user2 = RoleUser(role_id=role2.id, user_id=user1.id, blurb="Chip wrote chapter 2")
-#     role_user3 = RoleUser(role_id=role2.id, user_id=user2.id, blurb="Blue wrote chapters 1-3")
-#     role_user4 = RoleUser(role_id=role3.id, user_id=user2.id, blurb="Alyssa wrote chapter 4")
-
-#     session.add_all([role_user1, role_user2, role_user3, role_user4])
-#     session.commit()
-#     print("=========== Blurb")
-
-# ===================================================
-# with Session(bind=engine) as session:
-#     db_role = session.query(Role).options(
-#         joinedload(Role.users).options(joinedload(RoleUser.user))
-#     ).first()
-#     # db_role = session.query(Role).first()
-#     print("===========user_name: ", db_role.users[0].user_name)
-#     # print("=========== ", db_role.users[0].user.username)
-
-
-# ===================================================
-# with Session(bind=engine) as session:
-#     # b1 = session.query(Role).where(Role.id == 2).one()
-#     b1 = session.query(Role).options(
-#         joinedload(Role.users)).where(Role.id == 2).one()
-#     print("------------- Role: ", b1.name)
-#     for a in b1.users:
-#         print("------------- User: ", a.username)
-
-# ===================================================
+# ================================================================ FastAPI
 app = FastAPI(title="Bookipedia")
 
 
@@ -128,27 +137,34 @@ def get_db():
         db.close()
 
 
-@app.get("/roles/{id}", response_model=RoleSchema)
-async def get_role(id: int, db: Session = Depends(get_db)):
-    db_role = db.query(Role).options(
-        joinedload(Role.users)).where(Role.id == id).one()
-    return db_role
+@app.get("/books/{id}", response_model=BookSchema, response_model_exclude={'blurb'}, response_model_by_alias=False)
+async def get_book(id: int, db: Session = Depends(get_db)):
+    # db_book = db.query(Book).options(joinedload(        Book.authors)).where(Book.id == id).one()
+    db_book = db.query(Book).options(joinedload(Book.authors).options(
+        joinedload(BookAuthor.author))).where(Book.id == id).one()
+    return db_book
 
 
-@app.get("/roles", response_model=List[RoleSchema])
-async def get_roles(db: Session = Depends(get_db)):
-    db_roles = db.query(Role).options(joinedload(Role.users)).all()
-    return db_roles
+@app.get("/books", response_model=List[BookSchema],
+         response_model_exclude={'blurb'}, response_model_by_alias=False)
+async def get_books(db: Session = Depends(get_db)):
+    db_books = db.query(Book).options(joinedload(Book.authors)).all()
+    return db_books
 
 
-@app.get("/users", response_model=List[UserSchema])
-async def get_users(db: Session = Depends(get_db)):
-    db_users = db.query(User).options(joinedload(User.roles)).all()
-    return db_users
+@app.get("/authors/{id}", response_model=AuthorSchema,
+         response_model_exclude={'blurb'}, response_model_by_alias=False)
+async def get_author(id: int, db: Session = Depends(get_db)):
+    db_author = db.query(Author).options(joinedload(Author.books)).\
+        where(Author.id == id).one()
+    return db_author
 
 
-@app.get("/user/{id}", response_model=UserSchema)
-async def get_user(id: int, db: Session = Depends(get_db)):
-    db_user = db.query(User).options(
-        joinedload(User.roles)).where(User.id == id).one()
-    return db_user
+@app.get("/authors", response_model=List[AuthorSchema],
+         response_model_exclude={'blurb'}, response_model_by_alias=False)
+async def get_authors(db: Session = Depends(get_db)):
+    db_authors = db.query(Author).options(joinedload(Author.books)).all()
+    return db_authors
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
