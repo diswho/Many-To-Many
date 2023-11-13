@@ -1,6 +1,6 @@
 from sqlalchemy.ext.associationproxy import association_proxy
 from fastapi import FastAPI, Depends
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
@@ -50,25 +50,27 @@ Base.metadata.create_all(engine)
 class UserBase(BaseModel):
     id: int = Field(alias='user_id')
     name: str = Field(alias='user_name')
-    blurb: Optional[str]
+    blurb: Optional[str] = None
 
-    class Config:
-        orm_mode = True
-        allow_population_by_field_name = True
-    # model_config = ConfigDict(from_attributes=True)
-    # model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    # class Config:
+    #     orm_mode = True
+    #     allow_population_by_field_name = True
+    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True,
+                              populate_by_name=True, extra='allow')
 
 
 class RoleBase(BaseModel):
     id: int = Field(alias='role_id')
     name: str = Field(alias='role_name')
-    blurb: Optional[str]
+    blurb: Optional[str] = None
 
-    class Config:
-        orm_mode = True
-        allow_population_by_field_name = True
+    # class Config:
+    #     orm_mode = True
+    #     allow_population_by_field_name = True
     # model_config = ConfigDict(from_attributes=True)
-    # model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True,
+                              populate_by_name=True, extra='allow')
 
 
 class UserSchema(UserBase):
@@ -109,45 +111,44 @@ with Session(bind=engine) as session:
     print("=========== Blurb")
 
 # ===================================================
-with Session(bind=engine) as session:
-    db_role = session.query(Role).options(
-        joinedload(Role.users).options(joinedload(RoleUser.user))
-    ).first()
-    schema_role = RoleSchema.from_orm(db_role)
-    print("========= db_book: ", schema_role.json())
+# with Session(bind=engine) as session:
+#     # db_role = session.query(Role).options(joinedload(Role.users).options(joinedload(RoleUser.user))).first()
+#     db_role = session.query(Role).options(
+#         joinedload(Role.users)).where(Role.id == 1).one()
+#     schema_role = RoleSchema.model_validate(db_role)
+#     print("========= db_book: ", schema_role.model_dump_json())
 # ===================================================
-# app = FastAPI(title="Bookipedia")
+app = FastAPI(title="Bookipedia")
 
 
-# def get_db():
-#     db = Session(bind=engine)
-#     try:
-#         yield db
-#     finally:
-#         db.close()
+def get_db():
+    db = Session(bind=engine)
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-# @app.get("/roles/{id}", response_model=RoleSchema)
-# async def get_role(id: int, db: Session = Depends(get_db)):
-#     db_role = db.query(Role).options(
-#         joinedload(Role.users)).where(Role.id == id).one()
-#     return db_role
+@app.get("/roles/{id}", response_model=RoleSchema)
+async def get_role(id: int, db: Session = Depends(get_db)):
+    db_role = db.query(Role).options(joinedload(Role.users)).where(Role.id == id).one()
+    return db_role
 
 
-# @app.get("/roles", response_model=List[RoleSchema])
-# async def get_roles(db: Session = Depends(get_db)):
-#     db_roles = db.query(Role).options(joinedload(Role.users)).all()
-#     return db_roles
+@app.get("/roles", response_model=List[RoleSchema])
+async def get_roles(db: Session = Depends(get_db)):
+    db_roles = db.query(Role).options(joinedload(Role.users)).all()
+    return db_roles
 
 
-# @app.get("/users", response_model=List[UserSchema])
-# async def get_users(db: Session = Depends(get_db)):
-#     db_users = db.query(User).options(joinedload(User.roles)).all()
-#     return db_users
+@app.get("/users", response_model=List[UserSchema])
+async def get_users(db: Session = Depends(get_db)):
+    db_users = db.query(User).options(joinedload(User.roles)).all()
+    return db_users
 
 
-# @app.get("/user/{id}", response_model=UserSchema)
-# async def get_user(id: int, db: Session = Depends(get_db)):
-#     db_user = db.query(User).options(
-#         joinedload(User.roles)).where(User.id == id).one()
-#     return db_user
+@app.get("/user/{id}", response_model=UserSchema)
+async def get_user(id: int, db: Session = Depends(get_db)):
+    db_user = db.query(User).options(
+        joinedload(User.roles)).where(User.id == id).one()
+    return db_user
