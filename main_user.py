@@ -51,11 +51,6 @@ class UserBase(BaseModel):
     id: int = Field(alias='user_id')
     name: str = Field(alias='user_name')
     blurb: Optional[str] = None
-
-    # class Config:
-    #     orm_mode = True
-    #     allow_population_by_field_name = True
-    model_config = ConfigDict(from_attributes=True)
     model_config = ConfigDict(from_attributes=True,
                               populate_by_name=True, extra='allow')
 
@@ -64,11 +59,6 @@ class RoleBase(BaseModel):
     id: int = Field(alias='role_id')
     name: str = Field(alias='role_name')
     blurb: Optional[str] = None
-
-    # class Config:
-    #     orm_mode = True
-    #     allow_population_by_field_name = True
-    # model_config = ConfigDict(from_attributes=True)
     model_config = ConfigDict(from_attributes=True,
                               populate_by_name=True, extra='allow')
 
